@@ -148,17 +148,36 @@ candidate-platform/
 
 ## 6. Database schema
 
-Six models: `Admin`, `Candidate`, `Question`, `TestAttempt`, `CandidateAnswer`,
-`AppSetting` (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the ER
-diagram and constraints).
+PostgreSQL via Prisma. Six models, defined in
+[`server/prisma/schema.prisma`](server/prisma/schema.prisma); migrations are
+versioned under `server/prisma/migrations/` (four: init → candidate requirements
+→ question admin/settings → assessment engine).
 
-Highlights:
+| Model | Key columns | Relationships / constraints |
+|---|---|---|
+| `Admin` | `id`, `email` (unique), `passwordHash`, `name`, timestamps | — |
+| `Candidate` | `id`, `fullName`, `email` (unique), `passwordHash`, `age`, `phone`, `gender?`, `highestQualification`, `city?` | `attempt TestAttempt?` (one-to-one) |
+| `Question` | `id`, `questionText` (unique), `options String[]` (exactly 4), `correctOptionIndex`, `category`, `difficulty`, `isActive` | `answers CandidateAnswer[]`; indexes on `isActive`, `category`, `difficulty` |
+| `TestAttempt` | `id`, `candidateId` (**unique**), `status`, `questionOrder String[]`, `questionSnapshots Json`, `totalQuestions` (10), `startedAt`, `expiresAt`, `submittedAt?`, `durationMinutes`, `passPercentage`, `netScore?`, `correctCount?`, `incorrectCount?`, `unattemptedCount?`, `marksDeducted?`, `percentage?`, `result?`, `timeTakenSeconds?` | `candidate` (cascade delete), `answers CandidateAnswer[]`; indexes on `status`, `(status, expiresAt)`, `createdAt` |
+| `CandidateAnswer` | `id`, `attemptId`, `questionId`, `selectedOptionIndex?`, `markedForReview`, `answeredAt` | `@@unique([attemptId, questionId])`; `question` uses `onDelete: Restrict` |
+| `AppSetting` | `id` (singleton `1`), `assessmentDurationMinutes` (default 15), `passPercentage` (default 60) | one row only |
+
+Enums: `Gender`, `Category` (QUANTITATIVE / LOGICAL / VERBAL), `Difficulty`
+(EASY / MEDIUM / HARD), `AttemptStatus` (IN_PROGRESS / COMPLETED / EXPIRED),
+`AttemptResult` (PASS / FAIL), `Qualification`.
+
+**Integrity highlights:**
 
 - `TestAttempt.candidateId` is **unique** → one attempt per candidate.
 - `TestAttempt.questionSnapshots` stores an immutable JSON snapshot of the 10
-  questions at start.
-- `Question` has exactly 4 options; a DB trigger caps active questions at 10.
+  questions (text, options, correct index) at start, so grading is unaffected by
+  later question edits.
+- A DB trigger caps **active** questions at 10; checks enforce four distinct
+  options and a valid correct-option index.
 - `AppSetting` is a singleton (`id = 1`) holding duration + pass percentage.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the ER diagram and attempt
+lifecycle.
 
 ## 7. Prerequisites
 
@@ -328,20 +347,35 @@ them all.
 Security rules: never commit `.env`; never put secrets in `VITE_*` variables;
 never log secrets.
 
-## 11. Admin access
+## 11. Admin credentials
 
-The initial administrator is created by `npm run db:seed` from `ADMIN_EMAIL` /
-`ADMIN_PASSWORD` / `ADMIN_NAME`. The seed is **idempotent** — it never overwrites
-an existing admin, so you can rotate the password later via the database.
+The initial administrator is created by `npm run db:seed` from the `ADMIN_*`
+variables in `.env` (there is no self-service admin signup). The seed is
+**idempotent** — it never overwrites an existing admin, so you can rotate the
+password later without being re-seeded.
+
+**Seeded credentials in this repository's local `.env`:**
+
+| Role | Email | Password |
+|---|---|---|
+| Administrator | `admin@example.com` | `12345678` |
+| Demo candidate (optional) | `candidate@example.com` | `Candidate123!` |
+
+> These are **local development only**. `.env.example` ships with a different
+> placeholder admin password (`ChangeMe123!`), so whatever you put in your own
+> `.env` is what gets seeded.
+
+Admin sign-in: open the app and choose **Admin sign in** (or navigate to
+`/admin/login`).
 
 **For any non-local deployment:**
 
-- Set a strong, unique `ADMIN_PASSWORD`.
+- Set a strong, unique `ADMIN_PASSWORD` (the seed refuses placeholder values only
+  for the JWT secret; still choose a real password).
 - Do not publish real credentials.
 - Seed once, then remove/rotate the seed credentials if desired.
-
-Demo defaults in `.env.example`: `admin@example.com` / `12345678` (local
-only). Demo candidate: `candidate@example.com` / `Candidate123!`.
+- Changing `ADMIN_*` after the first seed does **not** change the existing admin
+  password — update it directly (or delete the admin row and re-seed).
 
 ## 12. Database management
 
@@ -434,6 +468,24 @@ table. All responses use the envelope
 - Pass/fail based solely on percentage vs. the pass threshold.
 - Candidates self-register; no email verification flow.
 - Admins are seeded via environment variables (no self-service admin signup).
+
+### Technical and operational assumptions
+
+- **Single instance / trusted DB clock:** the expiry sweeper and timer rely on
+  server time; the app assumes one primary process is authoritative (horizontal
+  scaling was not a design target).
+- **PostgreSQL is always reachable** during startup migration/seed; `/api/health`
+  reports DB status, but the process starts regardless.
+- **Same-origin production:** the SPA is served by the Express app, so cookies
+  need no cross-site configuration. Cross-origin use requires `CORS_ORIGIN` and
+  HTTPS (`COOKIE_SECURE=true`).
+- **Low concurrency:** limits (rate limiting, single attempt, 10-question bank)
+  target a small corporate assessment, not high-volume public traffic.
+- **Demo seed credentials are local-only** and must be replaced in production.
+- **Time zone:** timestamps are stored in UTC; display formatting is client-side.
+- **No external services:** no email, SMS, file storage, or payment integrations.
+- **Browser assumptions:** modern evergreen browsers with cookies enabled; the
+  build targets a desktop-first experience.
 
 ## 18. Security decisions
 
@@ -549,21 +601,47 @@ Built in phases with AI assistance: LLMs informed **architecture decisions** and
 **code generation/refactoring**, and AI ran the build, lint, typecheck, and test
 suites.
 
+### 24.1 Tools used
+
 | Tool | Role |
 |---|---|
-| **opencode** | CLI coding assistant — applied changes, ran build/lint/typecheck/tests |
+| **opencode** | CLI coding assistant — applied file edits, ran `build` / `lint` / `typecheck` / `test`, and verified changes |
 | **DeepSeek** | Architecture reasoning — module boundaries, auth/session design, snapshot grading, one-attempt constraint; prompt drafting |
 | **ChatGPT** | Architecture reviews — deployment options, schema/constraint critique, prompt and documentation hardening |
 
-**Workflow:** prompts were treated as engineering artifacts — frame the task
-(goal, constraints, acceptance criteria, "do not" rules), iterate with
-DeepSeek/ChatGPT to surface edge cases, execute in opencode, then verify.
+### 24.2 Key prompts
+
+Prompts were treated as engineering artifacts and framed with **goal, constraints,
+acceptance criteria, and explicit "do not" rules**. The verbatim transcripts from
+the earlier phases were not committed; the prompts below are **representative
+reconstructions** of the requests that shaped this repository (and are consistent
+with the committed code), not literal logs.
+
+| Area | Representative key prompt (paraphrased) |
+|---|---|
+| Architecture | "Design a single-tenant aptitude assessment platform: candidates self-register and take a timed, auto-graded 10-question MCQ test; one attempt per candidate; admins manage a question bank and results. Give module boundaries and a Prisma schema." |
+| Snapshot grading | "Grade server-side from an immutable snapshot of the questions taken at attempt start, so later edits to the question bank cannot change historical results. Show correct answers to candidates only after submission." |
+| One-attempt invariant | "Enforce exactly one attempt per candidate at the database level, and make it safe under concurrent submits. Do not rely on UI checks alone." |
+| Timer | "Make the timer server-authoritative. Expiry must be evaluated on the server and refreshing the page must resume the same attempt and remaining time." |
+| Question bank | "Cap active questions at exactly 10, enforced in the database (trigger + advisory lock), each with exactly four options and one correct answer. Block deletion of questions referenced by existing attempts." |
+| Auth | "Use JWT in HttpOnly, SameSite=Lax cookies with separate admin and candidate sessions. Add origin-allowlist CSRF protection, bcrypt passwords, rate limiting, and Helmet. Do not leak whether an email exists." |
+| Seed | "Write an idempotent seed that creates the admin, 10 questions, settings, and an optional demo candidate — and never overwrites admin-edited data or deletes candidates when re-run." |
+| Deployment | "Remove Docker. Deploy as one Render web service that serves the API and the built React SPA, with PostgreSQL on Neon (pooled `DATABASE_URL`, direct `DIRECT_URL`). Add scripts and a `render.yaml`." |
+| Verification | "Run the full build, lint, typecheck, and test suite; report actual commands and results. Do not claim checks that were not run." |
+
+### 24.3 Workflow
+
+1. **Frame** the task with goal, constraints, acceptance criteria, and "do not"
+   rules.
+2. **Iterate** with DeepSeek/ChatGPT to surface edge cases and trade-offs.
+3. **Execute** the change in opencode.
+4. **Verify** with build, lint, typecheck, and tests.
 
 **Phase 13 concrete tasks:** removed Docker; added `directUrl` for Neon; added
 root `dev`/`db:*`/`start:prod` scripts and `concurrently`; set the Vite port to
 5173; added `render.yaml`; rewrote `docs/ARCHITECTURE.md` and this README.
-Verbatim prompt transcripts from earlier phases (00–12) were not committed, so
-only what is verifiable from this repository and session is claimed.
+Because verbatim transcripts from earlier phases (00–12) were not committed, the
+prompts above are labeled representative rather than quoted.
 
 ## License
 
