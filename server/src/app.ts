@@ -2,11 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { allowedOrigins } from './config/env';
-import { AppError } from './lib/errors';
 import { apiRouter } from './routes';
+import { corsHandler } from './middleware/cors';
 import { csrfOriginCheck } from './middleware/csrf';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { requestLogger } from './middleware/requestLogger';
@@ -39,18 +37,7 @@ export function createApp(): express.Express {
   app.set('trust proxy', 1);
 
   app.use(helmet());
-  app.use(
-    cors({
-      origin(origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new AppError(403, 'CORS_FORBIDDEN', 'Origin is not allowed'));
-      },
-      credentials: true,
-    }),
-  );
+  app.use(corsHandler);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(requestLogger);

@@ -316,7 +316,7 @@ them all.
 | `ADMIN_SESSION_HOURS` | Admin token TTL | `8` | `8` |
 | `CANDIDATE_SESSION_HOURS` | Candidate token TTL | `12` | `12` |
 | `BCRYPT_ROUNDS` | Password hashing cost | `10`–`12` | `12` |
-| `CORS_ORIGIN` | Allowed browser origins (CSV) | `http://localhost:5173` | deployed HTTPS URL |
+| `CORS_ORIGIN` | Extra cross-origin hosts (CSV); same-origin + dev loopback are auto-allowed | `http://localhost:5173` | optional (only if cross-origin) |
 | `COOKIE_SECURE` | Cookies over HTTPS only | `false` | `true` (or omit → auto) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | Seed admin | demo values | controlled |
 | `SEED_CANDIDATE_*` | Optional demo candidate | demo values | optional |

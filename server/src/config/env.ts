@@ -60,3 +60,62 @@ export const cookieSecure =
 export const allowedOrigins = env.CORS_ORIGIN.split(',')
   .map((origin) => origin.trim())
   .filter((origin) => origin.length > 0);
+
+function normalizeOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackOrigin(normalizedOrigin: string): boolean {
+  try {
+    const hostname = new URL(normalizedOrigin).hostname.toLowerCase();
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns true when `origin` is allowed:
+ *  - it matches the server's own origin (a same-origin request), or
+ *  - it is explicitly listed in `CORS_ORIGIN`, or
+ *  - it is a loopback origin (localhost / 127.0.0.1 / ::1) and the app is NOT
+ *    running in production (so the Vite dev proxy works regardless of hostname
+ *    or port).
+ * A missing Origin header (non-browser client) is always allowed.
+ */
+export function isOriginAllowed(
+  origin: string | undefined,
+  protocol: string,
+  host: string | undefined,
+): boolean {
+  if (!origin) return true;
+
+  const normalized = normalizeOrigin(origin);
+  if (!normalized) return false;
+
+  if (host) {
+    const ownOrigin = normalizeOrigin(`${protocol}://${host}`);
+    if (ownOrigin && ownOrigin === normalized) {
+      return true;
+    }
+  }
+
+  if (allowedOrigins.some((allowed) => normalizeOrigin(allowed) === normalized)) {
+    return true;
+  }
+
+  if (!isProduction && isLoopbackOrigin(normalized)) {
+    return true;
+  }
+
+  return false;
+}

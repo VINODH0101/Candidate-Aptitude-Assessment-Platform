@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { AppError } from '../lib/errors';
-import { allowedOrigins } from '../config/env';
+import { isOriginAllowed } from '../config/env';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -10,13 +10,8 @@ export const csrfOriginCheck: RequestHandler = (req, _res, next) => {
     return;
   }
 
-  const origin = req.headers.origin;
-  if (typeof origin !== 'string' || origin.length === 0) {
-    next();
-    return;
-  }
-
-  if (allowedOrigins.includes(origin)) {
+  const origin = req.headers.origin as string | undefined;
+  if (isOriginAllowed(origin, req.protocol, req.headers.host)) {
     next();
     return;
   }
