@@ -506,13 +506,21 @@ git push -u origin main
    |---|---|
    | Runtime | Node |
    | Root Directory | (repo root) |
-   | Build Command | `npm install && npm run db:generate && npm run build` |
-   | Start Command | `npm run start:prod` |
+   | Build Command | `npm install --include=dev && npm run db:generate && npm run build` |
+   | Start Command | `NODE_ENV=production npm run start:prod` |
    | Health Check Path | `/api/health` |
 
-3. Add environment variables (see §10). Set `NODE_ENV=production`,
-   `HOST=0.0.0.0`, `CORS_ORIGIN=https://<your-app>.onrender.com`, and the Neon
-   `DATABASE_URL` / `DIRECT_URL`. Leave `PORT` unset — Render injects it.
+3. Add environment variables (see §10): `HOST=0.0.0.0`,
+   `CORS_ORIGIN=https://<your-app>.onrender.com`, and the Neon `DATABASE_URL` /
+   `DIRECT_URL`, plus `JWT_ACCESS_SECRET` and the seed admin vars. Leave `PORT`
+   unset — Render injects it.
+
+   > **Important:** do **not** set `NODE_ENV=production` as an environment
+   > variable. It is set inline in the Start Command above. Setting it as an env
+   > var would also apply it during the build, causing `npm install` to skip the
+   > `devDependencies` (TypeScript, `@types/node`, Prisma CLI, Vite) and the
+   > build to fail with `Cannot find type definition file for 'node'`. The
+   > `--include=dev` flag in the Build Command also guards against this.
 
 ### 20.4 Run migrations and seed (once)
 
