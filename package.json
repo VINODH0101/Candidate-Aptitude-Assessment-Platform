@@ -13,7 +13,7 @@
     "dev:frontend": "npm run dev --workspace web",
     "build": "npm run build --workspace server && npm run build --workspace web",
     "start": "npm run start --workspace server",
-    "start:prod": "npm run db:deploy && npm run start",
+    "start:prod": "npm run db:deploy && npm run db:seed && npm run start",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
     "lint": "npm run lint --workspace server && npm run lint --workspace web",
     "test": "npm run test --workspace server",

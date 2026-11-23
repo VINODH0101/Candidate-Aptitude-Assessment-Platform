@@ -522,17 +522,21 @@ git push -u origin main
    > build to fail with `Cannot find type definition file for 'node'`. The
    > `--include=dev` flag in the Build Command also guards against this.
 
-### 20.4 Run migrations and seed (once)
+### 20.4 Migrations and seed (automatic)
 
-The start command (`npm run start:prod`) applies migrations via
-`prisma migrate deploy` automatically. To create the initial admin and question
-bank, open the Render **Shell** tab and run:
+The start command (`npm run start:prod`) runs, in order:
 
-```bash
-npm run db:seed
-```
+1. `prisma migrate deploy` — applies pending migrations.
+2. `npm run db:seed` — idempotently creates the initial admin, the 10-question
+   bank, settings, and the demo candidate (skips anything that already exists).
+3. Starts the server.
 
-(Seed is idempotent; safe to re-run.)
+So no manual step is required on Render (including the free tier, where the
+Shell tab is unavailable). The seed is safe to run on every deploy and never
+overwrites or deletes existing data.
+
+If you prefer to seed manually (e.g. from your local machine against Neon), set
+`DATABASE_URL`/`DIRECT_URL` to the Neon values in `.env` and run `npm run db:seed`.
 
 ### 20.5 Verify
 

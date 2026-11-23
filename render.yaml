@@ -30,8 +30,9 @@ services:
       - key: JWT_ACCESS_SECRET
         sync: false
 
-      # Browser origin(s) allowed by CORS/CSRF. Use the deployed HTTPS URL, e.g.
-      # https://aptitude-assessment-platform.onrender.com  (same-origin).
+      # Optional extra cross-origin hosts (comma-separated). Same-origin requests
+      # are allowed automatically, so leave this blank unless you split the SPA
+      # and API onto different origins.
       - key: CORS_ORIGIN
         sync: false
 
