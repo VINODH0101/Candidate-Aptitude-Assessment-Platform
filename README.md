@@ -340,7 +340,7 @@ an existing admin, so you can rotate the password later via the database.
 - Do not publish real credentials.
 - Seed once, then remove/rotate the seed credentials if desired.
 
-Demo defaults in `.env.example`: `admin@example.com` / `ChangeMe123!` (local
+Demo defaults in `.env.example`: `admin@example.com` / `12345678` (local
 only). Demo candidate: `candidate@example.com` / `Candidate123!`.
 
 ## 12. Database management
@@ -469,84 +469,37 @@ passing).
 
 ## 20. Production deployment (Render + Neon)
 
-A single Render **Web Service** serves both the API and the built React app.
-PostgreSQL is hosted on **Neon**.
+A single Render **Web Service** serves the API and the built React SPA; PostgreSQL
+runs on **Neon**.
 
-### 20.1 Push to GitHub
+1. **Push to GitHub** — `git push -u origin main`.
+2. **Create a Neon database** — copy the **pooled** URL (`DATABASE_URL`) and the
+   **direct** URL (`DIRECT_URL`) from the Neon dashboard.
+3. **Deploy on Render** — either:
+   - **Blueprint (recommended):** Render → New → Blueprint → select the repo →
+     enter `DATABASE_URL`, `DIRECT_URL`, `JWT_ACCESS_SECRET`, `CORS_ORIGIN`,
+     `ADMIN_EMAIL`, `ADMIN_PASSWORD`; or
+   - **Manual Web Service:** Build Command
+     `npm install --include=dev && npm run db:generate && npm run build`, Start
+     Command `NODE_ENV=production npm run start:prod`, Health Check Path
+     `/api/health`.
+4. **Environment (see §10):** set `HOST=0.0.0.0`,
+   `CORS_ORIGIN=https://<your-app>.onrender.com`, the Neon URLs,
+   `JWT_ACCESS_SECRET`, and the seed admin vars. Leave `PORT` unset (Render
+   injects it).
 
-```bash
-git init   # if not already
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<your-account>/candidate-platform.git
-git push -u origin main
-```
+> **Do not** set `NODE_ENV=production` as an env var — it is set inline in the
+> Start Command. Setting it globally makes the build skip `devDependencies` and
+> fail; the `--include=dev` flag also guards against this.
 
-### 20.2 Create a Neon database
+**Migrations and seed are automatic.** `npm run start:prod` runs
+`prisma migrate deploy`, then the idempotent `db:seed`, then starts the server —
+so no Shell access is needed (works on the free tier). The seed never overwrites
+or deletes existing data.
 
-1. Go to <https://neon.com> and create a project + a database.
-2. Copy the **pooled** connection string (`DATABASE_URL`) and the **direct**
-   connection string (`DIRECT_URL`) from the Neon dashboard.
-
-### 20.3 Deploy on Render
-
-**Option A — Blueprint (recommended):**
-
-1. Render → **New** → **Blueprint** → select the repository.
-2. Enter the secret values when prompted (`DATABASE_URL`, `DIRECT_URL`,
-   `JWT_ACCESS_SECRET`, `CORS_ORIGIN`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
-
-**Option B — Manual Web Service:**
-
-1. Render → **New** → **Web Service** → connect the repo.
-2. Settings:
-
-   | Field | Value |
-   |---|---|
-   | Runtime | Node |
-   | Root Directory | (repo root) |
-   | Build Command | `npm install --include=dev && npm run db:generate && npm run build` |
-   | Start Command | `NODE_ENV=production npm run start:prod` |
-   | Health Check Path | `/api/health` |
-
-3. Add environment variables (see §10): `HOST=0.0.0.0`,
-   `CORS_ORIGIN=https://<your-app>.onrender.com`, and the Neon `DATABASE_URL` /
-   `DIRECT_URL`, plus `JWT_ACCESS_SECRET` and the seed admin vars. Leave `PORT`
-   unset — Render injects it.
-
-   > **Important:** do **not** set `NODE_ENV=production` as an environment
-   > variable. It is set inline in the Start Command above. Setting it as an env
-   > var would also apply it during the build, causing `npm install` to skip the
-   > `devDependencies` (TypeScript, `@types/node`, Prisma CLI, Vite) and the
-   > build to fail with `Cannot find type definition file for 'node'`. The
-   > `--include=dev` flag in the Build Command also guards against this.
-
-### 20.4 Migrations and seed (automatic)
-
-The start command (`npm run start:prod`) runs, in order:
-
-1. `prisma migrate deploy` — applies pending migrations.
-2. `npm run db:seed` — idempotently creates the initial admin, the 10-question
-   bank, settings, and the demo candidate (skips anything that already exists).
-3. Starts the server.
-
-So no manual step is required on Render (including the free tier, where the
-Shell tab is unavailable). The seed is safe to run on every deploy and never
-overwrites or deletes existing data.
-
-If you prefer to seed manually (e.g. from your local machine against Neon), set
-`DATABASE_URL`/`DIRECT_URL` to the Neon values in `.env` and run `npm run db:seed`.
-
-### 20.5 Verify
-
-1. Wait for the service to become **Live**.
-2. Open the service URL → the landing page loads.
-3. `GET /api/health` returns `database: up`.
-4. Sign in to the admin console and register a candidate to verify both flows.
-
-> **Render free tier:** services sleep after inactivity; the first request after
-> a sleep can take ~30–60 s to wake the container.
+**Verify:** the service is **Live**, the landing page loads, `GET /api/health`
+returns `database: up`, and both admin sign-in and candidate registration work.
+On the free tier, a sleeping service takes ~30–60 s to wake.
 
 ## 21. Demo walkthrough checklist
 
@@ -592,40 +545,25 @@ place them in `docs/screenshots/`, then reference them here:
 
 ## 24. AI development documentation
 
-This platform was developed in phases with the assistance of an AI coding
-assistant (**opencode**, powered by a code-generation model). This final phase
-("Phase 13 — production readiness, Docker removal, Render + Neon deployment")
-was performed in that tool.
+Built in phases with AI assistance: LLMs informed **architecture decisions** and
+**code generation/refactoring**, and AI ran the build, lint, typecheck, and test
+suites.
 
-### 24.1 Tools used
+| Tool | Role |
+|---|---|
+| **opencode** | CLI coding assistant — applied changes, ran build/lint/typecheck/tests |
+| **DeepSeek** | Architecture reasoning — module boundaries, auth/session design, snapshot grading, one-attempt constraint; prompt drafting |
+| **ChatGPT** | Architecture reviews — deployment options, schema/constraint critique, prompt and documentation hardening |
 
-- **opencode** — interactive CLI coding assistant used to inspect the codebase,
-  plan the changes, edit configuration, write documentation, and run the build,
-  lint, typecheck, and test suites.
-- **npm / Node.js** — dependency management and script execution.
-- **PostgreSQL (local) + Prisma CLI** — database verification.
+**Workflow:** prompts were treated as engineering artifacts — frame the task
+(goal, constraints, acceptance criteria, "do not" rules), iterate with
+DeepSeek/ChatGPT to surface edge cases, execute in opencode, then verify.
 
-### 24.2 Key prompts
-
-The primary prompt for this phase was the deployment-readiness brief, which
-directed: a full project audit, complete removal of Docker, Docker-free local
-Windows development, a single-service Render deployment, Neon PostgreSQL
-configuration, environment-variable documentation, an authentication/security
-audit, safe database initialization, health checks, comprehensive README/docs,
-and final verification.
-
-Concrete tasks executed from that brief (verifiable in this session):
-
-- Audit the repository and write `docs/PHASE_13_DEPLOYMENT_AUDIT.md`.
-- Remove Docker artifacts and scrub Docker references.
-- Add `directUrl` to the Prisma datasource for Neon.
-- Add root `dev`, `db:*`, `start:prod` scripts and `concurrently`.
-- Change the Vite dev port to 5173 and the CORS default origin accordingly.
-- Add `render.yaml`, rewrite `docs/ARCHITECTURE.md`, and write this README.
-
-> Note: detailed prompt transcripts from earlier phases (00–12) were not
-> committed to the repository. The sections above document only what is
-> verifiable from this repository and session.
+**Phase 13 concrete tasks:** removed Docker; added `directUrl` for Neon; added
+root `dev`/`db:*`/`start:prod` scripts and `concurrently`; set the Vite port to
+5173; added `render.yaml`; rewrote `docs/ARCHITECTURE.md` and this README.
+Verbatim prompt transcripts from earlier phases (00–12) were not committed, so
+only what is verifiable from this repository and session is claimed.
 
 ## License
 
