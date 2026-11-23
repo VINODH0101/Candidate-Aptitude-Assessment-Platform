@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum Category {
+  QUANTITATIVE
+  LOGICAL
+  VERBAL
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum AttemptResult {
+  PASS
+  FAIL
+}
+
+enum Qualification {
+  HIGH_SCHOOL
+  DIPLOMA
+  BACHELORS
+  MASTERS
+  DOCTORATE
+  OTHER
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Candidate {
+  id                   String         @id @default(uuid())
+  fullName             String
+  email                String         @unique
+  passwordHash         String
+  age                  Int
+  phone                String
+  gender               Gender?
+  highestQualification Qualification
+  city                 String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  attempt TestAttempt?
+
+  @@index([email])
+}
+
+model Question {
+  id                 String     @id @default(uuid())
+  questionText       String     @unique
+  options            String[]
+  correctOptionIndex Int
+  category           Category
+  difficulty         Difficulty
+  isActive           Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  answers CandidateAnswer[]
+
+  @@index([isActive])
+  @@index([category])
+  @@index([difficulty])
+}
+
+model TestAttempt {
+  id                String        @id @default(uuid())
+  candidateId       String        @unique
+  status            AttemptStatus @default(IN_PROGRESS)
+  questionOrder     String[]
+  questionSnapshots Json
+  totalQuestions    Int           @default(10)
+  startedAt         DateTime      @default(now())
+  expiresAt         DateTime
+  submittedAt       DateTime?
+  durationMinutes   Int
+  passPercentage    Int
+  netScore          Int?
+  correctCount      Int?
+  incorrectCount    Int?
+  unattemptedCount  Int?
+  marksDeducted     Int?
+  percentage        Int?
+  result            AttemptResult?
+  timeTakenSeconds  Int?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  candidate Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  answers   CandidateAnswer[]
+
+  @@index([status])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+}
+
+model CandidateAnswer {
+  id                  String   @id @default(uuid())
+  attemptId           String
+  questionId          String
+  selectedOptionIndex Int?
+  markedForReview     Boolean  @default(false)
+  answeredAt          DateTime @default(now())
+
+  attempt  TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model AppSetting {
+  id                        Int      @id @default(1)
+  assessmentDurationMinutes Int      @default(15)
+  passPercentage            Int      @default(60)
+  updatedAt                 DateTime @updatedAt
+}

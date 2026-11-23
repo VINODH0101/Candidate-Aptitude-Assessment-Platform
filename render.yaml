@@ -1,0 +1,46 @@
+# Render Blueprint — single Web Service (Express API + built React SPA).
+# The PostgreSQL database is hosted externally on Neon (not managed by Render).
+#
+# Usage:
+#   1. Push this repo to GitHub.
+#   2. In Render: New -> Blueprint -> select the repository.
+#   3. Enter the secret values when prompted (they are marked sync: false).
+#
+# Manual alternative (skip this file): create a Web Service with the same
+# build/start commands and environment variables documented in the README.
+services:
+  - type: web
+    name: aptitude-assessment-platform
+    runtime: node
+    plan: free
+    rootDir: ./
+    buildCommand: npm install && npm run db:generate && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+
+      # Secrets — set when prompted during Blueprint deploy. Never commit values.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+
+      # Browser origin(s) allowed by CORS/CSRF. Use the deployed HTTPS URL, e.g.
+      # https://aptitude-assessment-platform.onrender.com  (same-origin).
+      - key: CORS_ORIGIN
+        sync: false
+
+      # Seed credentials for the initial admin (used by `npm run db:seed`).
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Platform Admin
