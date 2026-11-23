@@ -365,6 +365,15 @@ password later without being re-seeded.
 > placeholder admin password (`ChangeMe123!`), so whatever you put in your own
 > `.env` is what gets seeded.
 
+**Production Admin credentials:**
+
+```
+ADMIN_EMAIL    : admin@example.com
+ADMIN_PASSWORD : 12345678
+```
+
+> Replace these with a strong, unique password before any public deployment.
+
 Admin sign-in: open the app and choose **Admin sign in** (or navigate to
 `/admin/login`).
 
